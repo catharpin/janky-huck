@@ -30,8 +30,10 @@ if (!file.exists("./data/test.csv")){
 
 training <- read.csv("./data/train.csv")
 testing  <- read.csv("./data/test.csv")
-
-head(training)
+```
+```{r}
+dim(training)
+dim(testing)
 ```
 
 
