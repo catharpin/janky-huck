@@ -1,0 +1,150 @@
+---
+title: "Exercise Quality Prediction from Accelerometer Data"
+author: "catharpin"
+date: "November 8, 2015"
+output: html_document
+---
+
+# Executive Summary
+
+Using accelerometer and position sensor data collected from test subjects performing physical exercises in a controlled environment, 
+a machine learning algorithm is developed to predict whether
+these exercises are being done correctly (and, if incorrect, if the incorrect performance can be specifically categorized.)
+
+Using a boosting with trees algorithm, using K-fold cross validation (n=10), a model is developed that with an error rate of 3.93%, with a 95% confidence interval of (3.34%,4.58%).  This error estimation was determined by withholding 20% of the training data by random sampling.
+
+# Libraries Used
+
+```{r libraries, results='hide'}
+library(doMC)
+library(caret)
+registerDoMC(cores=8)
+set.seed(10191) 
+```
+
+# Retrieving Data
+
+The data used is from the "Weight Lifting Exercises Dataset", retrieved 08 NOV 2015 from http://groupware.les.inf.puc-rio.br/har#dataset [1].
+
+```{r data-retrieve-load,echo=FALSE}
+if (!file.exists("./data")){dir.create("./data")}
+
+if (!file.exists("./data/train.csv")){
+  message("Retrieving training data set.")
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile = "./data/train.csv")
+} else {
+  message("Training data found.")
+}
+
+if (!file.exists("./data/test.csv")){
+  message("Retrieving testing data set.")
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile="./data/test.csv")
+} else {
+  message("Testing data found.")
+}
+
+orig_train <- read.csv("./data/train.csv")
+orig_test  <- read.csv("./data/test.csv")
+```
+
+#Data Cleansing
+
+Many of the variables are entirely missing from the test set and as a result have no predictive value.  These are removed from both training and test sets to increase tidiness and reduce effort of the fitting algorithm; we also remove time-of-day and data-collection artifacts.
+
+Initial fitting of the data showed the 'num_window' variable (column 7 in the data) as highly influential.  
+While it improved the accuracy of the model, in the author's opinion it is not a valid predictor in the spirit of the effort, 
+as it is an artifact of how the data was collected, and was removed.
+
+
+
+```{r cleansing-1}
+# Remove near-zero variables (from the testing set) from data frames.
+nzv_test <- nearZeroVar(orig_test)
+test <- orig_test[,-nzv_test]
+train <- orig_train[,-nzv_test]
+
+# Remove data-collection artifacts from data frames.
+test <- test[,c(-1,-3:-6)]
+train <- train[,c(-1,-3:-6)]
+```
+
+
+
+# Data Segmentation
+
+To provide an independent evaluation of the out-of-sample error rate, the training sample is further subdivided into training and 'self-test'
+sets.
+
+```{r segmentation-1}
+inTrain <- createDataPartition(y = train$classe, p=0.8, list=FALSE)
+train2<-train[inTrain,]
+self_test<-train[-inTrain,]
+```
+
+# Model Fit
+
+Some of the data could not be converted to numeric values, causing the fit function to emit a warning; 
+I have chosen to leave those as NA rather than to impute them, as it wasn't 
+necessary to obtain a high-accuracy fit.  
+
+```{r fit-1, cache=TRUE, results='hide'}
+tc <- trainControl(method="cv", number=10)
+fit1<-train(classe ~ ., data=train2, preProcess=c("center","scale"), method="gbm", trControl = tc, metric="Accuracy", verbose="FALSE")
+```
+
+# Result
+
+```{r fit-confusion}
+confusionMatrix(fit1)
+```
+
+# Out of Sample Error Estimation
+
+To estimate the error, we perform a fit on the 'self-test' set and determine the error rate.  See Accuracy, below, for the estimated
+accuracy and confidence interval.
+
+```{r error-estimate, results='show'}
+error_prediction <- predict(fit1, self_test)
+cm_outsample<-confusionMatrix(error_prediction, self_test$classe)
+cm_outsample
+```
+
+```{r graphic-attempt, echo=FALSE}
+rgb.palette <- colorRampPalette(c("white","yellow","red","black"), space="rgb")
+mypanel <- function(x,y,z,...) { panel.levelplot(x,y,z,...); panel.text(x,y,round(z,3))}
+levelplot(cm_outsample$table/rowSums(cm_outsample$table),panel=mypanel,col.regions=rgb.palette(120),cuts=100,at=seq(0,1.2,.01),xla="Predicted Class",yla="Actual Class",main="Normalized Confusion Matrix")
+
+```
+
+# Prediction
+
+The model is finally applied to the test dataset for evaluation.
+
+```{r prediction}
+pred <- predict(fit1, test)
+pred
+```
+
+```{r write-results,eval=FALSE, echo=FALSE,results='hide'}
+
+# This function is (as recommended by jtleek) to simplify generation of files for submission for the assignment.
+# It's not necessary for the analysis so it's commented out here.
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("jh_problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+# pml_write_files(as.character(pred))
+
+```
+
+
+
+# Bibliography
+
+[1] Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. _Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13)_ . Stuttgart, Germany: ACM SIGCHI, 2013. 
+
