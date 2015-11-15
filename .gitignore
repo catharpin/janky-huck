@@ -15,3 +15,11 @@ vignettes/*.pdf
 
 # Data directory
 data/
+
+# Result textfiles for the site
+results/
+
+# computed data caches
+index_cache/
+
+
