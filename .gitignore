@@ -2,6 +2,7 @@
 .Rhistory
 .Rapp.history
 
+
 # Example code in package build process
 *-Ex.R
 
@@ -22,4 +23,6 @@ results/
 # computed data caches
 index_cache/
 
+#current environment
+.RData
 
